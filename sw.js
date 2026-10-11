@@ -1,5 +1,5 @@
 // Bump this version whenever you change index.html, so phones pick up the update.
-const CACHE = 'my-cookings-v1';
+const CACHE = 'my-cookings-v2';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {

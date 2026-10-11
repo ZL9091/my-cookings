@@ -36,11 +36,17 @@ button,input,textarea{font:inherit;color:inherit}
 .home{display:grid;grid-template-rows:auto 1fr 1fr auto;min-height:100%;min-height:100dvh}
 .home-head{padding:calc(env(safe-area-inset-top) + 18px) 24px 14px;display:flex;align-items:baseline;justify-content:space-between}
 .home-head h1{margin:0;font:400 1.25rem/1 var(--serif)}
-.door{display:flex;flex-direction:column;justify-content:flex-end;padding:24px 24px 22px;color:#fff;text-decoration:none;position:relative}
-.door-meat{background:var(--meat)} .door-vegan{background:var(--vegan)}
-.door h2{margin:0;font:400 clamp(3.4rem,19vw,6rem)/.9 var(--serif);letter-spacing:-.01em}
-.door span{margin-top:8px;font-weight:500;opacity:.85}
-.door:active{filter:brightness(.92)}
+.door{display:flex;flex-direction:column;justify-content:flex-end;padding:24px 24px 22px;color:#fff;text-decoration:none;position:relative;overflow:hidden;isolation:isolate}
+.door-meat{background:radial-gradient(120% 90% at 85% 30%,#93323D 0%,#7A2630 55%,#651E28 100%)}
+.door-vegan{background:radial-gradient(120% 90% at 85% 30%,#4C7F47 0%,#3E6B3A 55%,#33592F 100%)}
+.door h2{margin:0;font:400 clamp(3.4rem,19vw,6rem)/.9 var(--serif);letter-spacing:-.01em;position:relative;z-index:1;text-shadow:0 2px 12px rgba(0,0,0,.18)}
+.door span{margin-top:8px;font-weight:500;opacity:.9;position:relative;z-index:1}
+.door .art{position:absolute;z-index:0;right:-3%;top:5%;transform:rotate(var(--tilt,0deg));
+  height:min(74%,320px);width:auto;max-width:62%;filter:drop-shadow(0 10px 18px rgba(0,0,0,.28));transition:transform .25s ease}
+.door-meat .art{--tilt:-6deg} .door-vegan .art{--tilt:5deg}
+.door:active .art{transform:rotate(var(--tilt)) scale(.95)}
+.door:active{filter:brightness(.94)}
+@media (prefers-reduced-motion:reduce){.door .art{transition:none}}
 .home-foot{display:block;padding:16px 24px calc(env(safe-area-inset-bottom) + 18px);text-decoration:none;color:var(--muted);font-size:.95rem}
 .home-foot.warn{color:var(--ink);font-weight:500}
 .home-foot.warn::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#C8902E;margin-right:8px;vertical-align:middle}
@@ -203,6 +209,47 @@ function resizeImage(file,max=1200){
   });
 }
 
+/* ---------- Home illustrations (inline, so they work offline) ---------- */
+const ART={meat:`<svg class="art" viewBox="0 0 240 220" aria-hidden="true">
+<defs><clipPath id="mc"><path d="M58 104C54 66 96 44 132 52c40 9 60 40 51 74-8 31-40 46-76 42-35-4-47-31-49-64z"/></clipPath></defs>
+<path d="M44 104C38 56 88 26 134 36c50 11 76 50 64 92-10 39-50 59-94 54-43-5-57-38-60-78z" fill="#F3DCC8"/>
+<path d="M58 104C54 66 96 44 132 52c40 9 60 40 51 74-8 31-40 46-76 42-35-4-47-31-49-64z" fill="#B8464F"/>
+<g clip-path="url(#mc)">
+ <path d="M70 70c18 6 30 2 44 10s26 4 40 12M64 112c22-4 34 6 52 2s30 6 50 0M84 146c14-6 30 0 44-4" stroke="#E7A9A0" stroke-width="3" fill="none" stroke-linecap="round" opacity=".7"/>
+ <g stroke="#5E1A23" stroke-width="9" stroke-linecap="round" opacity=".55"><path d="M40 92l120 -60M40 130l150 -75M60 165l150 -75M100 185l120 -60"/></g>
+</g>
+<path d="M118 50c-3 30-4 70 2 118" stroke="#F7F1EA" stroke-width="12" stroke-linecap="round" fill="none"/>
+<path d="M104 52c8-6 20-6 28 0" stroke="#F7F1EA" stroke-width="12" stroke-linecap="round" fill="none"/>
+<g transform="translate(176 150) rotate(-35)">
+ <path d="M0 0v70" stroke="#6E5A3C" stroke-width="3" stroke-linecap="round"/>
+ <g fill="#8FB07A">
+  <ellipse cx="-7" cy="8" rx="3.4" ry="10" transform="rotate(-35 -7 8)"/><ellipse cx="7" cy="14" rx="3.4" ry="10" transform="rotate(35 7 14)"/>
+  <ellipse cx="-7" cy="24" rx="3.4" ry="10" transform="rotate(-35 -7 24)"/><ellipse cx="7" cy="30" rx="3.4" ry="10" transform="rotate(35 7 30)"/>
+  <ellipse cx="-7" cy="40" rx="3.4" ry="10" transform="rotate(-35 -7 40)"/><ellipse cx="7" cy="46" rx="3.4" ry="10" transform="rotate(35 7 46)"/>
+  <ellipse cx="-6" cy="56" rx="3" ry="9" transform="rotate(-35 -6 56)"/><ellipse cx="6" cy="62" rx="3" ry="9" transform="rotate(35 6 62)"/>
+ </g>
+</g>
+<g fill="#2B0E12"><circle cx="34" cy="176" r="4"/><circle cx="46" cy="186" r="3.2"/><circle cx="28" cy="192" r="3.6"/></g>
+<g fill="#F7F1EA"><circle cx="200" cy="40" r="3"/><circle cx="212" cy="52" r="2.2"/><circle cx="192" cy="58" r="2.6"/></g>
+</svg>`,vegan:`<svg class="art" viewBox="0 0 240 220" aria-hidden="true">
+<g transform="translate(150 20) rotate(28)">
+ <path d="M-8 6c-10-14-6-30 2-38M0 4c0-16 6-30 16-38M6 8c10-12 24-16 34-12" stroke="#8DC06A" stroke-width="7" stroke-linecap="round" fill="none"/>
+ <path d="M-16 10c10-8 26-8 34 0 4 30-6 100-17 118-11-18-21-88-17-118z" fill="#E9883A"/>
+ <path d="M-10 36h10M2 58h10M-8 82h9M0 104h7" stroke="#C56A24" stroke-width="3" stroke-linecap="round"/>
+</g>
+<path d="M30 70c30-34 86-34 104 2-24 26-76 34-104-2z" fill="#9CC680"/>
+<path d="M30 70c34 2 70 2 104 2M70 71l-10-16M96 72l-6-18M76 71l-8 14M104 72l-4 14" stroke="#5E8F4C" stroke-width="3" stroke-linecap="round" fill="none"/>
+<g transform="translate(92 150) rotate(-18)">
+ <path d="M0-62c26 0 40 26 44 52 5 36-16 66-44 66s-49-30-44-66C-40-36-26-62 0-62z" fill="#2C4D29"/>
+ <path d="M0-52c21 0 32 22 35 44 4 30-12 54-35 54s-39-24-35-54C-32-30-21-52 0-52z" fill="#C9DC86"/>
+ <path d="M0-36c15 0 24 18 25 34 2 22-9 38-25 38s-27-16-25-38C-24-18-15-36 0-36z" fill="#E4EEB4"/>
+ <circle cx="0" cy="10" r="17" fill="#8A5A3B"/><circle cx="-5" cy="4" r="5" fill="#A87553"/>
+</g>
+<g fill="#C7303A"><circle cx="186" cy="176" r="18"/><circle cx="214" cy="160" r="12"/></g>
+<path d="M180 160c4-6 10-6 14-2M210 149c3-4 7-4 9-1" stroke="#6E9F48" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+<circle cx="180" cy="170" r="4" fill="#E86A6F" opacity=".7"/>
+</svg>`};
+
 /* ---------- Screens ---------- */
 async function viewHome(){
   setTheme(null);
@@ -213,8 +260,8 @@ async function viewHome(){
   const foot=last?`Last backup ${ago(last)}${stale?'. Time for a new one.':''}`:(own?'No backup yet. Tap to save one.':'Backup and restore');
   app.innerHTML=`<div class="home">
     <header class="home-head"><h1>My Cookings</h1></header>
-    <a class="door door-meat" href="#/list/meat"><h2>Meat</h2><span>${count(n('meat'))}</span></a>
-    <a class="door door-vegan" href="#/list/vegan"><h2>Vegan</h2><span>${count(n('vegan'))}</span></a>
+    <a class="door door-meat" href="#/list/meat">${ART.meat}<h2>Meat</h2><span>${count(n('meat'))}</span></a>
+    <a class="door door-vegan" href="#/list/vegan">${ART.vegan}<h2>Vegan</h2><span>${count(n('vegan'))}</span></a>
     <a class="home-foot ${stale?'warn':''}" href="#/backup">${foot}</a>
   </div>`;
 }
