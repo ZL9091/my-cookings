@@ -18,6 +18,11 @@ const SEED = [
 const app = document.getElementById('app');
 const LABEL = {meat:'Meat', vegan:'Vegan'};
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// Turns web addresses into tappable links (text is escaped first, so it stays safe).
+const linkify = s => esc(s).replace(/\b((?:https?:\/\/|www\.)[^\s<]+[^\s<.,;:!?)\]'"])/gi, m => {
+  const href = /^https?:/i.test(m) ? m : 'https://' + m;
+  return `<a href="${href}" target="_blank" rel="noopener noreferrer">${m}</a>`;
+});
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2));
 const lines = t => t.split('\n').map(s => s.trim()).filter(Boolean);
 const count = n => n === 1 ? '1 recipe' : `${n} recipes`;
@@ -233,13 +238,13 @@ function viewRecipe(id) {
         <h1 class="r-title" dir="auto">${esc(r.title)}</h1>
         ${meta.length ? `<p class="meta">${meta.map(m => `<span dir="auto">${m}</span>`).join('')}</p>` : ''}
         ${r.sample ? `<p class="sample">This is a starter example. Edit it into one of yours, or delete it.</p>` : ''}
-        ${ing.length ? `<h2>Ingredients</h2><ul class="ing">${ing.map(i => `<li dir="auto">${esc(i)}</li>`).join('')}</ul><p class="hint">Tap an ingredient to tick it off while you cook.</p>` : ''}
-        ${steps.length ? `<h2>Steps</h2><ol class="steps">${steps.map(s => `<li dir="auto">${esc(s)}</li>`).join('')}</ol>` : ''}
-        ${r.notes ? `<h2>Notes</h2><p class="notes" dir="auto">${esc(r.notes)}</p>` : ''}
+        ${ing.length ? `<h2>Ingredients</h2><ul class="ing">${ing.map(i => `<li dir="auto">${linkify(i)}</li>`).join('')}</ul><p class="hint">Tap an ingredient to tick it off while you cook.</p>` : ''}
+        ${steps.length ? `<h2>Steps</h2><ol class="steps">${steps.map(s => `<li dir="auto">${linkify(s)}</li>`).join('')}</ol>` : ''}
+        ${r.notes ? `<h2>Notes</h2><p class="notes" dir="auto">${linkify(r.notes)}</p>` : ''}
         <button class="btn btn-danger" id="del">Delete recipe</button>
       </div>
     </article>`;
-  app.querySelectorAll('.ing li').forEach(li => li.addEventListener('click', () => li.classList.toggle('done')));
+  app.querySelectorAll('.ing li').forEach(li => li.addEventListener('click', e => { if (!e.target.closest('a')) li.classList.toggle('done'); }));
   document.getElementById('del').onclick = () => {
     if (!confirm(`Delete “${r.title}” from all your devices?`)) return;
     removeRecipe(r.id); toast('Recipe deleted'); go('#/list/' + r.category);
@@ -272,7 +277,7 @@ function viewEdit(id, cat) {
       </div>
       <label class="field"><span>Ingredients</span><small>One ingredient per line</small><textarea name="ingredients" dir="auto" rows="8">${esc((r.ingredients || []).join('\n'))}</textarea></label>
       <label class="field"><span>Steps</span><small>One step per line</small><textarea name="steps" dir="auto" rows="9">${esc((r.steps || []).join('\n'))}</textarea></label>
-      <label class="field"><span>Notes</span><textarea name="notes" dir="auto" rows="3">${esc(r.notes)}</textarea></label>
+      <label class="field"><span>Notes</span><small>Web addresses become tappable links</small><textarea name="notes" dir="auto" rows="3">${esc(r.notes)}</textarea></label>
       <div class="actions"><a class="btn" href="${cancel}">Cancel</a><button class="btn btn-primary" type="submit">Save recipe</button></div>
     </form>`;
   const f = document.getElementById('f'), pbox = document.getElementById('pbox'), prm = document.getElementById('prm');
