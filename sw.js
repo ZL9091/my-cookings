@@ -1,16 +1,22 @@
-// Bump this version whenever you change index.html, so phones pick up the update.
-const CACHE = 'my-cookings-v2';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+// Bump this version whenever you change index.html.
+const CACHE = 'my-cookings-v4';
+const ASSETS = ['./', './index.html', './app.js', './config.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
+const SDK = ['firebase-app.js', 'firebase-auth.js', 'firebase-firestore.js'].map(f => FB + f);
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+  // cache:'reload' skips the browser's HTTP cache so we always store the newest files.
+  e.waitUntil(caches.open(CACHE).then(c =>
+    Promise.all([
+      ...ASSETS.map(u => fetch(new Request(u, { cache: 'reload' })).then(r => c.put(u, r))),
+      ...SDK.map(u => fetch(u, { mode: 'cors' }).then(r => r.ok && c.put(u, r)).catch(() => {}))
+    ])));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))));
-  self.clients.claim();
+    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 self.addEventListener('fetch', e => {
@@ -18,20 +24,30 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // App files: answer from the phone first (works offline), refresh in the background.
+  // Opening the app: try the internet first (always fresh), fall back to the saved copy when offline.
+  if (req.mode === 'navigate') {
+    e.respondWith(fetch(req, { cache: 'no-cache' }).then(res => {
+      if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put('./index.html', copy)); }
+      return res;
+    }).catch(() => caches.match('./index.html')));
+    return;
+  }
+
+  // Other app files (icons, manifest): saved copy first, refresh in the background.
   if (url.origin === location.origin) {
     e.respondWith(caches.match(req, { ignoreSearch: true }).then(hit => {
-      const net = fetch(req).then(res => {
+      const net = fetch(req, { cache: 'no-cache' }).then(res => {
         if (res.ok) { const copy = res.clone(); caches.open(CACHE).then(c => c.put(req, copy)); }
         return res;
-      }).catch(() => hit || caches.match('./index.html'));
+      }).catch(() => hit);
       return hit || net;
     }));
     return;
   }
 
-  // Fonts: keep a copy after the first online visit.
-  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') {
+  // Fonts and the sync library: keep a copy after the first online visit.
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com' ||
+      (url.hostname === 'www.gstatic.com' && url.pathname.startsWith('/firebasejs/'))) {
     e.respondWith(caches.open(CACHE).then(async c => {
       const hit = await c.match(req);
       if (hit) return hit;
