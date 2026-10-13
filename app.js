@@ -1,4 +1,5 @@
-import { firebaseConfig } from './config.js';
+import * as CFG from './config.js';
+const { firebaseConfig } = CFG;
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 let F = {}, A = {}, auth, fs;
@@ -47,7 +48,9 @@ function resizeImage(file, max = 1000) {
 }
 
 /* ---------- Cloud data ---------- */
-const recDoc = id => F.doc(fs, 'users', user.uid, 'recipes', id);
+/* Everyone reads and writes the same recipe box: the one belonging to sharedBoxOwner in config.js. */
+const boxId = () => { const o = CFG.sharedBoxOwner; return (o && !o.startsWith('PASTE')) ? o : user.uid; };
+const recDoc = id => F.doc(fs, 'users', boxId(), 'recipes', id);
 function saveRecipe(r) {
   const clean = JSON.parse(JSON.stringify(r));
   recipes.set(clean.id, clean);                       // show it right away
@@ -105,7 +108,7 @@ async function maybeMigrate() {
 }
 
 function subscribe() {
-  const col = F.collection(fs, 'users', user.uid, 'recipes');
+  const col = F.collection(fs, 'users', boxId(), 'recipes');
   unsub = F.onSnapshot(col, {includeMetadataChanges:true}, snap => {
     const changed = snap.docChanges().length > 0 || !ready;
     recipes = new Map(snap.docs.map(d => [d.id, d.data()]));

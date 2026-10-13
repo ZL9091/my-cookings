@@ -1,5 +1,5 @@
 // Bump this version whenever you change index.html.
-const CACHE = 'my-cookings-v6';
+const CACHE = 'my-cookings-v7';
 const ASSETS = ['./', './index.html', './app.js', './config.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png', './avatar.webp'];
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
 const SDK = ['firebase-app.js', 'firebase-auth.js', 'firebase-firestore.js'].map(f => FB + f);

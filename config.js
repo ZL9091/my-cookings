@@ -7,3 +7,6 @@ export const firebaseConfig = {
   messagingSenderId: "1017459952020",
   appId: "1:1017459952020:web:5cdd26454cce35b27a2781"
 };
+
+// The account whose recipe box everyone shares: YOUR Firebase User UID (keep the quotes).
+export const sharedBoxOwner = "PASTE_YOUR_UID_HERE";
