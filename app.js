@@ -160,11 +160,13 @@ const ART={meat:`<svg class="art" viewBox="0 0 240 220" aria-hidden="true">
 
 /* ---------- Screens ---------- */
 function viewSetup(msg) {
+  window.hideSplash?.();
   setTheme(null);
   app.innerHTML = `<div class="login"><h1>My Cookings</h1><p>${msg || 'Sync isn’t connected yet. Paste your Firebase settings into <b>config.js</b> and upload it to GitHub.'}</p></div>`;
 }
 
 function viewLogin() {
+  window.hideSplash?.();
   setTheme(null);
   app.innerHTML = `<div class="login">
     <h1>My Cookings</h1>
@@ -353,6 +355,7 @@ function go(h) { if (location.hash === h) render(); else location.hash = h; }
 function render() {
   if (!user) return;
   if (!ready) { app.innerHTML = '<div class="login"><p>Loading your recipes…</p></div>'; return; }
+  window.hideSplash?.();
   const [, view, arg] = (location.hash.slice(1) || '/').split('/');
   const a = arg && decodeURIComponent(arg);
   if (view === 'list') return viewList(a);
