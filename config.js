@@ -9,4 +9,4 @@ export const firebaseConfig = {
 };
 
 // The account whose recipe box everyone shares: YOUR Firebase User UID (keep the quotes).
-export const sharedBoxOwner = "PASTE_YOUR_UID_HERE";
+export const sharedBoxOwner = "EsijC0GKkBSi5v15AhpP2ZS2CY53";
