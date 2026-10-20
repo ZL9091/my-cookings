@@ -28,6 +28,108 @@ const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString
 const lines = t => t.split('\n').map(s => s.trim()).filter(Boolean);
 const count = n => n === 1 ? '1 recipe' : `${n} recipes`;
 const list = () => [...recipes.values()];
+
+/* ---------- Ingredient amounts: each ingredient is {qty, unit, name} ---------- */
+const FRAC = {'¼':1/4,'½':1/2,'¾':3/4,'⅓':1/3,'⅔':2/3,'⅛':1/8,'⅜':3/8,'⅝':5/8,'⅞':7/8,'⅕':1/5};
+const HEBNUM = {'חצי':1/2,'רבע':1/4,'שליש':1/3,'אחד':1,'אחת':1,'שני':2,'שתי':2,'שניים':2,'שתיים':2,'שלוש':3,'שלושה':3,'ארבע':4,'ארבעה':4,
+  'חמש':5,'חמישה':5,'שש':6,'שישה':6,'שבע':7,'שבעה':7,'שמונה':8,'תשע':9,'תשעה':9,'עשר':10,'עשרה':10};
+// Units with a singular and plural form, so "1 כוס" becomes "2 כוסות" when scaled.
+const PLURALS = [['כוס','כוסות'],['כף','כפות'],['כפית','כפיות'],['יחידה','יחידות'],['חבילה','חבילות'],['קופסה','קופסאות'],['פחית','פחיות'],
+  ['צרור','צרורות'],['ענף','ענפים'],['פרוסה','פרוסות'],['שקית','שקיות'],['cup','cups'],['tablespoon','tablespoons'],['teaspoon','teaspoons'],
+  ['can','cans'],['clove','cloves'],['package','packages'],['bunch','bunches'],['slice','slices'],['lb','lbs']];
+const UNITS = [...PLURALS.flat(), 'גרם',"גר'",'גר','ק"ג','קג','קילו','מ"ל','מל','ליטר','קורט','g','gr','kg','ml','l','tbsp','tsp','oz','pinch'];
+// Units that mean "one" when written without a number: "כוס קמח", "כף שמן", "קורט מלח".
+const IMPLIED = new Set(['כוס','כף','כפית','קורט','חבילה','קופסה','פחית','צרור','ענף','שקית','ליטר','קילו','פרוסה']);
+const FINE_UNIT = /^(גרם|גר'?|מ"ל|מל|g|gr|grams?|ml|cc)$/i;   // weighed or measured finely: no fractions
+const reEsc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const byLen = a => [...a].sort((x, y) => y.length - x.length).map(reEsc).join('|');
+const NUM_RE = String.raw`(?:\d+(?:[.,]\d+)?(?:\s+\d+\/\d+|\s*[¼½¾⅓⅔⅛⅜⅝⅞⅕])?|\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞⅕]|(?:${byLen(Object.keys(HEBNUM))})(?=\s|$))(?:\s+ו(?:חצי|רבע)(?=\s|$))?`;
+const QTY_RE = new RegExp(`^(${NUM_RE}(?:\\s*[-–]\\s*${NUM_RE})?)(?![\\d/])`);
+const UNIT_RE = new RegExp(`^(${byLen(UNITS)})(?=$|[\\s,.;:()\\-])`, 'i');
+
+function parseNum(s) {
+  s = String(s ?? '').trim().replace(',', '.');
+  if (!s) return null;
+  if (s in HEBNUM) return HEBNUM[s];
+  let m = s.match(/^(.*?)\s*ו(חצי|רבע)$/);
+  if (m) { const b = m[1] ? parseNum(m[1]) : 0; return b == null ? null : b + (m[2] === 'חצי' ? .5 : .25); }
+  if ((m = s.match(/^(\d+(?:\.\d+)?)?\s*([¼½¾⅓⅔⅛⅜⅝⅞⅕])$/))) return (+m[1] || 0) + FRAC[m[2]];
+  if ((m = s.match(/^(?:(\d+)\s+)?(\d+)\/(\d+)$/)) && +m[3]) return (+m[1] || 0) + m[2] / m[3];
+  if (/^\d+(\.\d+)?$/.test(s)) return +s;
+  return null;
+}
+// "2", "1½", "2-3" -> {lo, hi}; anything else (empty, "to taste") -> null
+function qtyRange(q) {
+  const p = String(q ?? '').trim().split(/\s*[-–]\s*/);
+  if (!p[0] || p.length > 2) return null;
+  const n = p.map(parseNum);
+  return n.some(x => x == null || x <= 0) ? null : {lo: n[0], hi: n[1] ?? null};
+}
+function niceFrac(v) {
+  const w0 = Math.floor(v), f = v - w0;
+  const opts = [[0,''],[1/4,'¼'],[1/3,'⅓'],[1/2,'½'],[2/3,'⅔'],[3/4,'¾'],[1,'']].concat(w0 ? [] : [[1/8,'⅛']]);
+  let best = opts[0]; for (const o of opts) if (Math.abs(f - o[0]) < Math.abs(f - best[0])) best = o;
+  const w = w0 + (best[0] === 1 ? 1 : 0);
+  if (!w && !best[1]) return String(Math.round(v * 100) / 100 || 0);
+  return (w ? String(w) : '') + best[1];
+}
+function fmtAmount(v, unit) {
+  if (FINE_UNIT.test(String(unit || '').trim())) return String(v >= 50 ? Math.round(v / 5) * 5 : v >= 10 ? Math.round(v) : Math.round(v * 10) / 10);
+  if (v >= 20) return String(Math.round(v));
+  if (v >= 5) return niceFrac(Math.round(v * 2) / 2);
+  return niceFrac(v);
+}
+function unitFor(unit, v) {
+  const p = PLURALS.find(f => f.some(x => x.toLowerCase() === String(unit).toLowerCase()));
+  return p ? (v > 1 ? p[1] : p[0]) : unit;
+}
+const fmtLine = it => [it.qty, it.unit, it.name].map(s => String(s ?? '').trim()).filter(Boolean).join(' ');
+function scaleItem(it, k) {
+  const r = qtyRange(it.qty); if (!r) return it;
+  const lo = fmtAmount(r.lo * k, it.unit), hi = r.hi != null ? fmtAmount(r.hi * k, it.unit) : null;
+  return {...it, qty: hi ? `${lo}-${hi}` : lo, unit: unitFor(it.unit, parseNum(hi || lo))};
+}
+// Splits a free-text line ("2 כוסות קמח", "כוס וחצי סוכר", "Salt - 1 tsp") into its parts.
+// Section titles inside the ingredient list: "### לרוטב", "*לבשר:*", "לרוטב:".
+const isSection = s => { s = String(s ?? '').trim(); return /^#{1,6}\s*\S/.test(s) || /^\*{1,3}[^*]+\*{1,3}$/.test(s) || (/:\s*$/.test(s) && s.length <= 30); };
+const sectionText = s => String(s).trim().replace(/^#{1,6}\s*|^\*{1,3}\s*|\s*\*{1,3}$/g, '').replace(/\s*:\s*$/, '').replace(/^\*+\s*|\s*\*+$/g, '');
+function parseLine(text) {
+  let t = String(text ?? '').trim().replace(/״/g, '"').replace(/׳/g, "'");
+  if (isSection(t)) return {qty:'', unit:'', name:t};
+  t = t.replace(/^[*•·-]\s+/, '').replace(/^כ\s?[־-]\s?(?=[\d¼½¾⅓⅔])/, '');   // list bullets, and "כ־" (about) before a number
+  const lead = s => {
+    let qty = '', unit = '', rest = s, m = s.match(QTY_RE);
+    if (m) { qty = m[1].trim(); rest = s.slice(m[0].length).trim(); }
+    const u = rest.match(UNIT_RE);
+    if (u && (qty || IMPLIED.has(u[1]))) {
+      unit = u[1]; rest = rest.slice(u[0].length).trim();
+      if (!qty) qty = '1';
+      const h = rest.match(/^ו(חצי|רבע)(?=\s|$)/);
+      if (h) { qty = qty + ' ו' + h[1]; rest = rest.slice(h[0].length).trim(); }
+    }
+    if (!qty) return null;
+    if (/[\u0590-\u05FF]/.test(qty)) { const r = qtyRange(qty); if (r) qty = niceFrac(r.lo) + (r.hi ? '-' + niceFrac(r.hi) : ''); }
+    return {qty, unit, name: rest.replace(/^of\s+/i, '')};
+  };
+  if (!t) return {qty:'', unit:'', name:''};
+  const a = lead(t); if (a) return a;
+  // amount written after the name: "קמח - 2 כוסות", "Salt: 1 tsp", "ביצים 3"
+  for (let i = t.indexOf(' '); i > 0; i = t.indexOf(' ', i + 1)) {
+    const name = t.slice(0, i).replace(/[\s:\-–]+$/, '').trim(), b = lead(t.slice(i + 1).replace(/^[\s:\-–]+/, ''));
+    if (name && b && !b.name) return {...b, name};
+  }
+  return {qty:'', unit:'', name:t};
+}
+// Structured ingredients if they match the text list; otherwise read them from the text
+// (older recipes, or a recipe edited on a device that hasn't updated yet).
+function getItems(r) {
+  const ing = r.ingredients || [], it = r.items;
+  if (Array.isArray(it) && it.length === ing.length && it.every((x, i) => fmtLine(x) === ing[i]))
+    return it.map(x => ({qty: x.qty || '', unit: x.unit || '', name: x.name || ''}));
+  return ing.map(parseLine);
+}
+const ltr = s => s ? '\u2066' + s + '\u2069' : '';   // keeps "1½" and "2-3" readable inside Hebrew text
+const hasHebrew = s => /[\u0590-\u05FF]/.test(s);
 const setTheme = c => { document.body.className = c ? 'theme-' + c : '';
   document.querySelector('meta[name=theme-color]').content = c === 'meat' ? '#7A2630' : c === 'vegan' ? '#3E6B3A' : '#1F2420'; };
 const BACK_ICON = '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
@@ -234,8 +336,9 @@ function viewList(cat) {
 function viewRecipe(id) {
   const r = recipes.get(id); if (!r) return go('#/');
   setTheme(r.category);
-  const ing = r.ingredients || [], steps = r.steps || [];
-  const meta = [r.prepTime && `Time: ${esc(r.prepTime)}`, r.servings && `Serves ${esc(r.servings)}`].filter(Boolean);
+  const items = getItems(r), steps = r.steps || [];
+  const scalable = items.map((it, i) => i).filter(i => qtyRange(items[i].qty));
+  const meta = [r.prepTime && `Time: ${esc(r.prepTime)}`, r.servings && `<span id="serves">Serves ${esc(r.servings)}</span>`].filter(Boolean);
   app.innerHTML = `${topbar('#/list/' + r.category, LABEL[r.category], `<a href="#/edit/${encodeURIComponent(r.id)}">Edit</a>`)}
     <article class="recipe">
       ${r.photo ? `<img class="hero" src="${r.photo}" alt="">` : ''}
@@ -243,13 +346,66 @@ function viewRecipe(id) {
         <h1 class="r-title" dir="auto">${esc(r.title)}</h1>
         ${meta.length ? `<p class="meta">${meta.map(m => `<span dir="auto">${m}</span>`).join('')}</p>` : ''}
         ${r.sample ? `<p class="sample">This is a starter example. Edit it into one of yours, or delete it.</p>` : ''}
-        ${ing.length ? `<h2>Ingredients</h2><ul class="ing">${ing.map(i => `<li dir="auto">${linkify(i)}</li>`).join('')}</ul><p class="hint">Tap an ingredient to tick it off while you cook.</p>` : ''}
+        ${items.length ? `<div class="ing-head"><h2>Ingredients</h2>${scalable.length ? `<button type="button" class="chip" id="sc-open" aria-expanded="false" aria-controls="sc">Change amounts</button>` : ''}</div>
+          <div class="scale" id="sc" hidden>
+            <label class="field"><span>Ingredient to change</span><select id="sc-ing">${scalable.map(i => `<option value="${i}">${esc(items[i].name || items[i].qty)} (${esc([ltr(items[i].qty), items[i].unit].filter(Boolean).join(' '))})</option>`).join('')}</select></label>
+            <label class="field"><span>New amount</span><span class="qty-in"><input id="sc-q" inputmode="decimal" autocomplete="off"><span id="sc-u" dir="auto"></span></span></label>
+            <p class="sc-info" id="sc-info" aria-live="polite"></p>
+            <button type="button" class="btn" id="sc-reset">Back to original amounts</button>
+          </div>
+          <ul class="ing" id="ing"></ul><p class="hint">Tap an ingredient to tick it off while you cook.</p>` : ''}
         ${steps.length ? `<h2>Steps</h2><ol class="steps">${steps.map(s => `<li dir="auto">${linkify(s)}</li>`).join('')}</ol>` : ''}
         ${r.notes ? `<h2>Notes</h2><p class="notes" dir="auto">${linkify(r.notes)}</p>` : ''}
         <button class="btn btn-danger" id="del">Delete recipe</button>
       </div>
     </article>`;
-  app.querySelectorAll('.ing li').forEach(li => li.addEventListener('click', e => { if (!e.target.closest('a')) li.classList.toggle('done'); }));
+  // Ingredient list, optionally scaled by factor k (shown only; the saved recipe keeps its amounts).
+  const done = new Set(), ul = document.getElementById('ing');
+  let k = 1;
+  const drawIng = () => {
+    if (!ul) return;
+    ul.innerHTML = items.map((it, i) => {
+      if (!it.qty && isSection(it.name)) return `<li class="sec" dir="auto">${esc(sectionText(it.name))}</li>`;
+      const s = k !== 1 ? scaleItem(it, k) : it, amt = [s.qty && `<bdi dir="ltr">${esc(s.qty)}</bdi>`, esc(s.unit)].filter(Boolean).join(' ');
+      const cls = [done.has(i) && 'done', k !== 1 && qtyRange(it.qty) && 'scaled'].filter(Boolean).join(' ');
+      return `<li dir="auto" data-i="${i}"${cls ? ` class="${cls}"` : ''}>${amt ? `<span class="amt">${amt}</span> ` : ''}${linkify(s.name)}</li>`;
+    }).join('');
+    const sv = document.getElementById('serves'), n = parseNum(r.servings);
+    if (sv) sv.textContent = k !== 1 && n ? `Serves ${fmtAmount(n * k)} (recipe: ${r.servings})` : `Serves ${r.servings}`;
+  };
+  ul?.addEventListener('click', e => {
+    const li = e.target.closest('li'); if (!li || li.classList.contains('sec') || e.target.closest('a')) return;
+    const i = +li.dataset.i; done.has(i) ? done.delete(i) : done.add(i); li.classList.toggle('done');
+  });
+  drawIng();
+  const open = document.getElementById('sc-open');
+  if (open) {
+    const sc = document.getElementById('sc'), sel = document.getElementById('sc-ing'), q = document.getElementById('sc-q'),
+      unitEl = document.getElementById('sc-u'), info = document.getElementById('sc-info');
+    // Start on the main ingredient: the first one weighed in grams or kilos, otherwise the first with an amount.
+    const main = scalable.find(i => FINE_UNIT.test(items[i].unit) || /^(ק"ג|קג|קילו|kg|lbs?)$/i.test(items[i].unit)) ?? scalable[0];
+    sel.value = main;
+    const base = () => items[+sel.value];
+    const update = () => {
+      const it = base(), v = parseNum(q.value), lo = qtyRange(it.qty).lo;
+      k = v && v > 0 ? v / lo : 1;
+      unitEl.textContent = unitFor(it.unit, v || lo);
+      info.textContent = !q.value.trim() || k === 1 ? `The recipe uses ${fmtLine({qty: ltr(it.qty), unit: it.unit})}. Type the amount you have.`
+        : !v ? 'Type a number, like 750 or 1.5.'
+        : `All amounts are ×${Math.round(k * 100) / 100}. The saved recipe doesn’t change.`;
+      drawIng();
+    };
+    const pick = () => { q.value = qtyRange(base().qty).hi ? niceFrac(qtyRange(base().qty).lo) : base().qty; update(); };
+    const toggle = show => {
+      sc.hidden = !show; open.setAttribute('aria-expanded', show); open.textContent = show ? 'Close' : 'Change amounts';
+      if (show) { pick(); q.focus(); q.select(); } else { k = 1; drawIng(); }
+    };
+    open.onclick = () => toggle(sc.hidden);
+    sel.onchange = () => { pick(); q.focus(); q.select(); };
+    q.addEventListener('input', update);
+    q.addEventListener('keydown', e => { if (e.key === 'Enter') q.blur(); });
+    document.getElementById('sc-reset').onclick = () => toggle(false);
+  }
   document.getElementById('del').onclick = () => {
     if (!confirm(`Delete “${r.title}” from all your devices?`)) return;
     removeRecipe(r.id); toast('Recipe deleted'); go('#/list/' + r.category);
@@ -280,7 +436,16 @@ function viewEdit(id, cat) {
         <label class="field"><span>Time</span><input name="prepTime" dir="auto" value="${esc(r.prepTime)}" placeholder="45 min"></label>
         <label class="field"><span>Servings</span><input name="servings" dir="auto" value="${esc(r.servings)}" placeholder="4"></label>
       </div>
-      <label class="field"><span>Ingredients</span><small>One ingredient per line</small><textarea name="ingredients" dir="auto" rows="8">${esc((r.ingredients || []).join('\n'))}</textarea></label>
+      <div class="field"><span id="ing-l">Ingredients</span><small>Amount, unit and ingredient each in its own box. Leave the amount empty for things like “salt to taste”.</small>
+        <div class="ing-rows" id="rows" role="group" aria-labelledby="ing-l"></div>
+        <button type="button" class="btn btn-small" id="row-add">Add ingredient</button>
+        <details class="paste"><summary>Paste a list of ingredients</summary>
+          <small>One ingredient per line. Each line is split into amount, unit and ingredient for you to check.</small>
+          <textarea id="paste" dir="auto" rows="5" aria-label="Ingredients to paste"></textarea>
+          <button type="button" class="btn btn-small" id="paste-add">Add to ingredients</button>
+        </details>
+        <datalist id="units">${['גרם','ק"ג','מ"ל','ליטר','כוס','כוסות','כף','כפות','כפית','כפיות','יחידות','קורט','חבילה','פחית','g','kg','ml','cup','tbsp','tsp'].map(u => `<option value="${esc(u)}">`).join('')}</datalist>
+      </div>
       <label class="field"><span>Steps</span><small>One step per line</small><textarea name="steps" dir="auto" rows="9">${esc((r.steps || []).join('\n'))}</textarea></label>
       <label class="field"><span>Notes</span><small>Web addresses become tappable links</small><textarea name="notes" dir="auto" rows="3">${esc(r.notes)}</textarea></label>
       <div class="actions"><a class="btn" href="${cancel}">Cancel</a><button class="btn btn-primary" type="submit">Save recipe</button></div>
@@ -294,13 +459,50 @@ function viewEdit(id, cat) {
     try { photo = await resizeImage(file); drawPhoto(); } catch { toast('That file couldn’t be opened as a photo.'); }
   });
   prm.onclick = () => { photo = null; drawPhoto(); };
+  // Ingredient rows
+  const rows = document.getElementById('rows');
+  const rowHTML = (it = {}) => `<div class="ing-row">
+      <input class="r-q" dir="auto" value="${esc(it.qty)}" placeholder="Amount" aria-label="Amount" autocomplete="off">
+      <input class="r-u" dir="auto" value="${esc(it.unit)}" placeholder="Unit" aria-label="Unit" list="units" autocomplete="off">
+      <input class="r-n" dir="auto" value="${esc(it.name)}" placeholder="Ingredient" aria-label="Ingredient" autocomplete="off">
+      <button type="button" class="x" aria-label="Remove ingredient">×</button></div>`;
+  const setDir = () => { rows.dir = hasHebrew(f.title.value + [...rows.querySelectorAll('.r-n')].map(i => i.value).join('')) ? 'rtl' : 'ltr'; };
+  const addRows = (list, after = null) => {
+    const html = list.map(rowHTML).join('');
+    after ? after.insertAdjacentHTML('afterend', html) : rows.insertAdjacentHTML('beforeend', html);
+    setDir();
+  };
+  const startItems = getItems(r);
+  addRows(startItems.length ? startItems : [{}]);
+  rows.addEventListener('click', e => {
+    const x = e.target.closest('.x'); if (!x) return;
+    x.parentElement.remove(); if (!rows.children.length) addRows([{}]);
+  });
+  rows.addEventListener('input', setDir);
+  f.title.addEventListener('input', setDir);
+  rows.addEventListener('keydown', e => {
+    if (e.key !== 'Enter' || !e.target.matches('input')) return;
+    e.preventDefault();
+    const row = e.target.closest('.ing-row');
+    if (e.target.classList.contains('r-n')) { addRows([{}], row); row.nextElementSibling.querySelector('.r-q').focus(); }
+    else e.target.nextElementSibling.focus();
+  });
+  document.getElementById('row-add').onclick = () => { addRows([{}]); rows.lastElementChild.querySelector('.r-q').focus(); };
+  document.getElementById('paste-add').onclick = () => {
+    const ta = document.getElementById('paste'), got = lines(ta.value).map(parseLine); if (!got.length) return;
+    [...rows.children].forEach(row => { if (![...row.querySelectorAll('input')].some(i => i.value.trim())) row.remove(); });
+    addRows(got); ta.value = ''; ta.closest('details').open = false;
+    toast(got.length === 1 ? 'Added 1 ingredient' : `Added ${got.length} ingredients`);
+  };
   f.onsubmit = e => {
     e.preventDefault();
     const d = new FormData(f), title = d.get('title').trim();
     if (!title) { toast('Add a recipe name to save.'); f.title.focus(); return; }
     const now = Date.now();
+    const items = [...rows.children].map(row => ({qty: row.querySelector('.r-q').value.trim(), unit: row.querySelector('.r-u').value.trim(),
+      name: row.querySelector('.r-n').value.trim()})).filter(it => it.qty || it.name);
     const rec = {...(existing || {}), id: existing ? existing.id : uid(), category: d.get('category'), title,
-      ingredients: lines(d.get('ingredients')), steps: lines(d.get('steps')), notes: d.get('notes').trim(),
+      items, ingredients: items.map(fmtLine), steps: lines(d.get('steps')), notes: d.get('notes').trim(),
       prepTime: d.get('prepTime').trim(), servings: d.get('servings').trim(), photo,
       createdAt: existing?.createdAt || now, updatedAt: now};
     delete rec.sample;
@@ -315,6 +517,26 @@ function downloadBackup() {
   const a = Object.assign(document.createElement('a'), {href:url, download:`my-cookings-backup-${new Date().toISOString().slice(0,10)}.json`});
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
   toast('Backup saved to Downloads');
+}
+// A readable copy of every recipe, for printing or keeping. (Photos aren't included; the backup file has them.)
+function downloadText() {
+  const block = r => {
+    const out = [r.title, '='.repeat(Math.max(8, r.title.length)), `Category: ${LABEL[r.category] || r.category}`];
+    if (r.prepTime) out.push(`Time: ${r.prepTime}`);
+    if (r.servings) out.push(`Servings: ${r.servings}`);
+    const items = (r.ingredients || []).filter(Boolean);   // exactly as saved
+    if (items.length) out.push('', 'Ingredients:', ...items.map(i => '- ' + i));
+    if ((r.steps || []).length) out.push('', 'Steps:', ...r.steps.map((st, i) => `${i + 1}. ${st}`));
+    if (r.notes) out.push('', 'Notes:', r.notes);
+    return out.join('\r\n');
+  };
+  const all = list().sort((a, b) => (a.category + a.title).localeCompare(b.category + b.title));
+  const head = `My Cookings: ${count(all.length)}, exported ${new Date().toLocaleString()}`;
+  const txt = '\uFEFF' + [head, ...all.map(block)].join('\r\n\r\n\r\n') + '\r\n';
+  const url = URL.createObjectURL(new Blob([txt], {type:'text/plain;charset=utf-8'}));
+  const a = Object.assign(document.createElement('a'), {href:url, download:`my-cookings-recipes-${new Date().toISOString().slice(0,10)}.txt`});
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('Text file saved to Downloads');
 }
 async function importBackup(file) {
   let data; try { data = JSON.parse(await file.text()); } catch { data = null; }
@@ -340,15 +562,21 @@ function viewBackup() {
       </section>
       <section>
         <h2>Backup file</h2>
-        <p>Your recipes are already stored safely in the cloud. A backup file is an extra copy you can keep yourself.</p>
+        <p>Your recipes are already stored safely in the cloud. A backup file is an extra copy you can keep yourself, with photos, and you can restore from it here.</p>
         <div class="btn-row">
           <button class="btn btn-primary" id="dl">Download backup file</button>
           <label class="btn">Restore from file<input type="file" accept=".json,.txt,application/json,text/plain" id="imp"></label>
         </div>
       </section>
+      <section>
+        <h2>Readable copy</h2>
+        <p>All recipes in one text file you can open, read or print anywhere. Photos aren’t included, and the app can’t restore from it.</p>
+        <button class="btn" id="txt">Download as text file</button>
+      </section>
     </div>`;
   updateStatus();
   document.getElementById('dl').onclick = downloadBackup;
+  document.getElementById('txt').onclick = downloadText;
   document.getElementById('out').onclick = () => { if (confirm('Sign out on this device? Your recipes stay in the cloud.')) A.signOut(auth); };
   document.getElementById('imp').addEventListener('change', e => { const f = e.target.files[0]; if (f) importBackup(f); e.target.value = ''; });
 }
