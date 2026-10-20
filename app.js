@@ -351,7 +351,8 @@ function viewRecipe(id) {
             <label class="field"><span>Ingredient to change</span><select id="sc-ing">${scalable.map(i => `<option value="${i}">${esc(items[i].name || items[i].qty)} (${esc([ltr(items[i].qty), items[i].unit].filter(Boolean).join(' '))})</option>`).join('')}</select></label>
             <label class="field"><span>New amount</span><span class="qty-in"><input id="sc-q" inputmode="decimal" autocomplete="off"><span id="sc-u" dir="auto"></span></span></label>
             <p class="sc-info" id="sc-info" aria-live="polite"></p>
-            <button type="button" class="btn" id="sc-reset">Back to original amounts</button>
+            <div class="btn-row"><button type="button" class="btn btn-primary" id="sc-save" disabled>Save these amounts</button>
+            <button type="button" class="btn" id="sc-reset">Back to original amounts</button></div>
           </div>
           <ul class="ing" id="ing"></ul><p class="hint">Tap an ingredient to tick it off while you cook.</p>` : ''}
         ${steps.length ? `<h2>Steps</h2><ol class="steps">${steps.map(s => `<li dir="auto">${linkify(s)}</li>`).join('')}</ol>` : ''}
@@ -392,7 +393,8 @@ function viewRecipe(id) {
       unitEl.textContent = unitFor(it.unit, v || lo);
       info.textContent = !q.value.trim() || k === 1 ? `The recipe uses ${fmtLine({qty: ltr(it.qty), unit: it.unit})}. Type the amount you have.`
         : !v ? 'Type a number, like 750 or 1.5.'
-        : `All amounts are ×${Math.round(k * 100) / 100}. The saved recipe doesn’t change.`;
+        : `All amounts are ×${Math.round(k * 100) / 100}. Tap Save to keep them in the recipe.`;
+      document.getElementById('sc-save').disabled = k === 1;
       drawIng();
     };
     const pick = () => { q.value = qtyRange(base().qty).hi ? niceFrac(qtyRange(base().qty).lo) : base().qty; update(); };
@@ -405,6 +407,15 @@ function viewRecipe(id) {
     q.addEventListener('input', update);
     q.addEventListener('keydown', e => { if (e.key === 'Enter') q.blur(); });
     document.getElementById('sc-reset').onclick = () => toggle(false);
+    // Make the shown amounts the recipe's own amounts.
+    document.getElementById('sc-save').onclick = () => {
+      if (k === 1) return;
+      const n = parseNum(r.servings), it = base();
+      if (!confirm(`Save the new amounts in “${r.title}”? From now on the recipe will use ${fmtLine({qty: ltr(scaleItem(it, k).qty), unit: scaleItem(it, k).unit, name: it.name})}. Numbers written inside the steps don’t change.`)) return;
+      const next = items.map(x => scaleItem(x, k));
+      saveRecipe({...r, items: next, ingredients: next.map(fmtLine), servings: n ? fmtAmount(n * k) : r.servings, updatedAt: Date.now()});
+      toast('New amounts saved'); render();
+    };
   }
   document.getElementById('del').onclick = () => {
     if (!confirm(`Delete “${r.title}” from all your devices?`)) return;

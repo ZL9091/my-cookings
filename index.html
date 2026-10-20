@@ -106,9 +106,11 @@ button,input,textarea,select{font:inherit;color:inherit}
 .scale select{width:100%;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface)}
 .qty-in{display:flex;align-items:center;gap:10px}
 .field .qty-in input{width:7.5em;font-size:1.15rem;font-weight:600}
-.qty-in span{font-weight:600}
+.qty-in span{font-weight:600;margin-inline-start:6px;unicode-bidi:isolate}
 .sc-info{margin:0 0 14px;color:var(--muted);font-size:.93rem}
 .scale .btn{min-height:42px;padding:0 18px}
+.scale .btn-row{display:flex;flex-wrap:wrap;gap:10px}
+.scale .btn:disabled{opacity:.45;cursor:default}
 .amt{font-weight:600}
 .ing li.scaled .amt{color:var(--accent)}
 .ing li.done .amt{color:inherit}
